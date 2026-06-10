@@ -122,14 +122,14 @@
         const CLOUD_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:json`;
 
         const datosRespaldoLocal = [
-            { vehiculo: "Mercedes V 250", estado: "En Carga", tension: 11.8, regimen: 1634, velocidad: 81, presion: "1142.6", masaAire: "384.2", kilometraje: "97.233 mi", dtcs: "P20E800, P30066B, P30066C, B210D16, U100800", observaciones: "Alta: Tensión crítica en carga (11.8V). Fallo de presión en sistema AdBlue." },
-            { vehiculo: "Mercedes V 250", estado: "Ralentí", tension: 12.1, regimen: 750, velocidad: 0, presion: "295.0", masaAire: "42.1", kilometraje: "97.233 mi", dtcs: "P20E800, P30066B, P30066C", observaciones: "Media: Tensión baja en ralentí. Sistema de post-tratamiento afectado." },
-            { vehiculo: "Mercedes V 250", estado: "Contacto", tension: 11.6, regimen: 0, velocidad: 0, presion: "0.0", masaAire: "0.0", kilometraje: "97.233 mi", dtcs: "B210D16, U100800", observaciones: "Baja: Subtensión de batería en reposo. Errores de comunicación CAN." },
-            { vehiculo: "Renault Kadjar", estado: "Ralentí", tension: 14.28, regimen: 240, velocidad: 2, presion: "84.0", masaAire: "36.5", kilometraje: "58.321 km", dtcs: "P038096, P1517, P0611", observaciones: "Media: Gestión de carga correcta (14.2V). Fallo en precalentamiento." },
-            { vehiculo: "Renault Kadjar", estado: "En Carga", tension: 13.9, regimen: 2100, velocidad: 45, presion: "890.0", masaAire: "120.4", kilometraje: "58.321 km", dtcs: "P038096, P0611", observaciones: "Media: Errores persistentes en el módulo de control de inyectores." },
-            { vehiculo: "Skoda Superb", estado: "Contacto", tension: 12.4, regimen: 0, velocidad: 0, presion: "---", masaAire: "---", kilometraje: "75.645 km", dtcs: "B126E13, B126D13, U112100", observaciones: "Baja: Interrupción en amplificadores de antena. Fallos estáticos de confort." },
-            { vehiculo: "Suzuki Vitara", estado: "Contacto", tension: 15.1, regimen: 0, velocidad: 0, presion: "---", masaAire: "---", kilometraje: "---", dtcs: "U2001, B1206, P0563", observaciones: "Alta: Sobretensión severa (15.1V) detectada en modo contacto." },
-            { vehiculo: "Suzuki Vitara", estado: "Ralentí", tension: 15.2, regimen: 800, velocidad: 0, presion: "270.0", masaAire: "32.8", kilometraje: "---", dtcs: "U2001, P0563", observaciones: "Alta: Fallo grave en el regulador del alternador (DTC P0563)." }
+            { vehiculo: "Mercedes V 250", estado: "En Carga", tension: 11.8, regimen: 1634, presion: "1142.6", dtcs: "P20E800, P30066B, P30066C, B210D16, U100800", observaciones: "Alta: Tensión crítica en carga (11.8V)." },
+            { vehiculo: "Mercedes V 250", estado: "Ralentí", tension: 12.1, regimen: 750, presion: "295.0", dtcs: "P20E800, P30066B, P30066C", observaciones: "Media: Tensión baja en ralentí." },
+            { vehiculo: "Mercedes V 250", estado: "Contacto", tension: 11.6, regimen: 0, presion: "0.0", dtcs: "B210D16, U100800", observaciones: "Baja: Subtensión de batería en reposo." },
+            { vehiculo: "Renault Kadjar", estado: "Ralentí", tension: 14.28, regimen: 240, presion: "84.0", dtcs: "P038096, P1517, P0611", observaciones: "Media: Gestión de carga correcta (14.2V)." },
+            { vehiculo: "Renault Kadjar", estado: "En Carga", tension: 13.9, regimen: 2100, presion: "890.0", dtcs: "P038096, P0611", observaciones: "Media: Errores en inyectores." },
+            { vehiculo: "Skoda Superb", estado: "Contacto", tension: 12.4, regimen: 0, presion: "---", dtcs: "B126E13, B126D13, U112100", observaciones: "Baja: Fallos estáticos de confort." },
+            { vehiculo: "Suzuki Vitara", estado: "Contacto", tension: 15.1, regimen: 0, presion: "---", dtcs: "U2001, B1206, P0563", observaciones: "Alta: Sobretensión severa (15.1V)." },
+            { vehiculo: "Suzuki Vitara", estado: "Ralentí", tension: 15.2, regimen: 800, presion: "270.0", dtcs: "U2001, P0563", observaciones: "Alta: Fallo grave en el regulador del alternador (DTC P0563)." }
         ];
 
         let datosGlobales = [];
@@ -148,57 +148,53 @@
                 const text = await response.text();
                 const jsonMatch = text.match(/google\.visualization\.Query\.setResponse\(([\s\S\w\W]*)\);/);
                 
-                if (!jsonMatch) throw new Error("Formato inválido.");
+                if (!jsonMatch) throw new Error("Formato de respuesta inválido.");
                 
                 const gData = JSON.parse(jsonMatch[1]);
                 const rows = gData.table.rows;
 
-                // PROCESAMIENTO TOLERANTE A FORMATOS REGIONALES DE GOOGLE SHEETS
+                // RELACIÓN EXACTA DE COLUMNAS DEL EXCEL (Índices de 0 a 9 reconstruidos correctamente)
                 datosGlobales = rows.map(row => {
                     const c = row.c;
-                    if (!c || !c[0] || c[0].v === null) return null;
+                    if (!c) return null;
+                    
+                    // Si el nombre del vehículo (c[0]) está completamente vacío, descartamos la fila
+                    if (!c[0] || (c[0].v === null && c[0].f === null)) return null;
+                    let vehiculoTexto = c[0].v !== null ? String(c[0].v).trim() : (c[0].f ? String(c[0].f).trim() : '');
+                    if (vehiculoTexto === "") return null;
 
-                    // Extractor de Tensión Seguro (Limpia textos y convierte comas a puntos)
-                    let tensionVal = 12.0; 
-                    if (c[2]) {
-                        let textoCelda = c[2].f ? String(c[2].f) : (c[2].v !== null && c[2].v !== undefined ? String(c[2].v) : '');
-                        let textoLimpio = textoCelda.replace(/[^0-9.,-]/g, '').replace(',', '.');
+                    // Función limpiadora ultra-segura para celdas numéricas con texto o comas regionales
+                    const extraerNumero = (celda, defecto = 0) => {
+                        if (!celda) return defecto;
+                        let texto = celda.f ? String(celda.f) : (celda.v !== null && celda.v !== undefined ? String(celda.v) : '');
+                        let textoLimpio = texto.replace(/[^0-9.,-]/g, '').replace(',', '.');
                         let parsed = parseFloat(textoLimpio);
-                        if (!isNaN(parsed)) tensionVal = parsed;
-                    }
+                        return isNaN(parsed) ? defecto : parsed;
+                    };
 
-                    // Extractor de Régimen Seguro
-                    let regimenVal = 0;
-                    if (c[3]) {
-                        let textoCelda = c[3].f ? String(c[3].f) : (c[3].v !== null && c[3].v !== undefined ? String(c[3].v) : '0');
-                        let textoLimpio = textoCelda.replace(/[^0-9-]/g, '');
-                        let parsed = parseInt(textoLimpio, 10);
-                        if (!isNaN(parsed)) regimenVal = parsed;
-                    }
-
-                    // Extractor de Velocidad Seguro
-                    let velocidadVal = 0;
-                    if (c[4]) {
-                        let textoCelda = c[4].f ? String(c[4].f) : (c[4].v !== null && c[4].v !== undefined ? String(c[4].v) : '0');
-                        let textoLimpio = textoCelda.replace(/[^0-9-]/g, '');
-                        let parsed = parseInt(textoLimpio, 10);
-                        if (!isNaN(parsed)) velocidadVal = parsed;
-                    }
+                    // Función segura para extraer texto de celdas
+                    const extraerTexto = (celda, defecto = '---') => {
+                        if (!celda) return defecto;
+                        if (celda.v !== null && celda.v !== undefined) return String(celda.v).trim();
+                        if (celda.f !== null && celda.f !== undefined) return String(celda.f).trim();
+                        return defecto;
+                    };
 
                     return {
-                        vehiculo: c[0] ? String(c[0].v).trim() : 'Desconocido',
-                        estado: c[1] ? String(c[1].v).trim() : 'N/A',
-                        tension: tensionVal,
-                        regimen: regimenVal,
-                        velocidad: velocidadVal,
-                        presion: c[5] && c[5].v !== null ? String(c[5].v).trim() : '---',
-                        masaAire: c[6] && c[6].v !== null ? String(c[6].v).trim() : '---',
-                        kilometraje: c[7] && c[7].v !== null ? String(c[7].v).trim() : '---',
-                        dtcs: c[8] && c[8].v !== null ? String(c[8].v).trim() : 'Ninguno',
-                        observaciones: c[9] && c[9].v !== null ? String(c[9].v).trim() : ''
+                        vehiculo: vehiculoTexto,                  // Columna A (c[0])
+                        estado: extraerTexto(c[1], 'N/A'),        // Columna B (c[1])
+                        tension: extraerNumero(c[2], 12.0),       // Columna C (c[2])
+                        regimen: Math.round(extraerNumero(c[3], 0)), // Columna D (c[3])
+                        velocidad: extraerNumero(c[4], 0),        // Columna E (c[4]) -> Se mapea pero no se visualiza en tabla principal
+                        presion: extraerTexto(c[5], '---'),       // Columna F (c[5])
+                        masaAire: extraerTexto(c[6], '---'),      // Columna G (c[6]) -> Omitida en visualización por diseño
+                        kilometraje: extraerTexto(c[7], '---'),   // Columna H (c[7]) -> Omitida en visualización por diseño
+                        dtcs: extraerTexto(c[8], 'Ninguno'),      // Columna I (c[8])
+                        observaciones: extraerTexto(c[9], '')     // Columna J (c[9])
                     };
                 }).filter(item => item !== null);
 
+                // Descartar cabeceras automáticas de texto si el Excel las incluye arriba
                 if (datosGlobales[0] && datosGlobales[0].vehiculo.toLowerCase().includes("vehículo")) {
                     datosGlobales.shift();
                 }
@@ -209,7 +205,7 @@
                 document.getElementById("lblOrigenDatos").innerText = "Google Cloud API Live";
 
             } catch (err) {
-                console.warn("Entrando en modo Backup:", err);
+                console.warn("Entrando en modo Offline por precaución:", err);
                 datosGlobales = [...datosRespaldoLocal];
                 
                 const barra = document.getElementById("statusNotification");
@@ -273,12 +269,16 @@
 
                 const tr = document.createElement("tr");
                 tr.className = "hover:bg-slate-900/60 transition";
+                
+                // Formatear la presión correctamente en la vista
+                let presionTexto = item.presion.toLowerCase().includes('bar') || item.presion.includes('---') ? item.presion : item.presion + ' bar';
+
                 tr.innerHTML = `
                     <td class="p-3 font-semibold text-slate-200">${item.vehiculo}</td>
                     <td class="p-3 text-slate-400 font-medium">${item.estado}</td>
                     <td class="p-3 text-center font-mono ${tensionColor}">${item.tension.toFixed(2)} V</td>
                     <td class="p-3 text-center text-slate-400 font-mono">${item.regimen} rpm</td>
-                    <td class="p-3 text-center text-slate-400 font-mono">${item.presion} bar</td>
+                    <td class="p-3 text-center text-slate-400 font-mono">${presionTexto}</td>
                     <td class="p-3 font-mono text-blue-400 font-semibold max-w-xs truncate" title="${item.dtcs}">${item.dtcs}</td>
                     <td class="p-3"><span class="px-2 py-0.5 rounded text-[10px] border ${badgeColor}">${item.observaciones}</span></td>
                 `;
